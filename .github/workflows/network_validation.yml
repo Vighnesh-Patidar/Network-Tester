@@ -1,0 +1,88 @@
+name: network-validation
+
+on:
+  push:
+    paths:
+      - "topology.json"
+      - "chaos_engine/**"
+      - "substrate/**"
+      - "common/**"
+      - "visualizer/**"
+      - "tests/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/network_validation.yml"
+  pull_request:
+    paths:
+      - "topology.json"
+      - "chaos_engine/**"
+      - "substrate/**"
+      - "common/**"
+      - "CMakeLists.txt"
+
+jobs:
+  build-and-unit-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake libpcap-dev nlohmann-json3-dev libgtest-dev
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+  validate-topology:
+    needs: build-and-unit-test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install substrate dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake libpcap-dev nlohmann-json3-dev libgtest-dev \
+            openvswitch-switch openvswitch-common mininet \
+            frr frr-pythontools iproute2
+
+      - name: Build chaos engine
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_VISUALIZER=OFF
+          cmake --build build --parallel --target chaos_engine link_shaper_cli
+
+      - name: Start Open vSwitch
+        run: sudo systemctl start openvswitch-switch || sudo service openvswitch-switch start
+
+      # The engine and substrate need root for netns/veth/OVS/tc; the runner is
+      # single-use and isolated, which is what makes running as root acceptable
+      # (§4.1). The chaos engine's POSIX exit code is the merge/reject gate (§3).
+      - name: Bring up substrate and run the test matrix
+        run: |
+          export LINK_SHAPER_CLI="$PWD/build/link_shaper_cli"
+          sudo -E python3 substrate/mininet_topology.py --topology topology.json &
+          SUBSTRATE_PID=$!
+          sleep 25
+          sudo -E ./build/chaos_engine \
+            --topology topology.json \
+            --report build/convergence_report.json \
+            --convergence-timeout-ms 8000 \
+            --stabilization-timeout-ms 60000
+          STATUS=$?
+          sudo kill "$SUBSTRATE_PID" || true
+          exit $STATUS
+
+      - name: Upload convergence report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: convergence-report
+          path: build/convergence_report.json
