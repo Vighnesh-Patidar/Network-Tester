@@ -1,0 +1,17 @@
+# Build output
+build/
+build-*/
+cmake-build-*/
+
+# Generated reports
+convergence_report.json
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Python bytecode
+__pycache__/
+*.pyc

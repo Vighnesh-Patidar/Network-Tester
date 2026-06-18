@@ -1,0 +1,30 @@
+{
+  "nodes": [
+    { "id": "r1", "protocols": ["ospf"], "ospf_area": "0.0.0.0" },
+    { "id": "r2", "protocols": ["ospf"], "ospf_area": "0.0.0.0" },
+    { "id": "r3", "protocols": ["ospf"], "ospf_area": "0.0.0.0" },
+    { "id": "r4", "protocols": ["ospf"], "ospf_area": "0.0.0.0" },
+    {
+      "id": "r5",
+      "protocols": ["ospf", "bgp"],
+      "ospf_area": "0.0.0.0",
+      "bgp_as": 65001,
+      "bgp_peers": [{ "peer": "r6", "remote_as": 65002 }]
+    },
+    {
+      "id": "r6",
+      "protocols": ["bgp"],
+      "bgp_as": 65002,
+      "bgp_peers": [{ "peer": "r5", "remote_as": 65001 }]
+    }
+  ],
+  "links": [
+    { "id": "l_r1_r2", "a": "r1", "b": "r2", "metric": 10, "capacity_mbps": 1000, "latency_ms": 2.0, "jitter_ms": 0.2, "loss_pct": 0.0 },
+    { "id": "l_r2_r3", "a": "r2", "b": "r3", "metric": 10, "capacity_mbps": 1000, "latency_ms": 2.0, "jitter_ms": 0.2, "loss_pct": 0.0 },
+    { "id": "l_r3_r4", "a": "r3", "b": "r4", "metric": 10, "capacity_mbps": 1000, "latency_ms": 2.0, "jitter_ms": 0.2, "loss_pct": 0.0 },
+    { "id": "l_r1_r4", "a": "r1", "b": "r4", "metric": 30, "capacity_mbps": 100, "latency_ms": 8.0, "jitter_ms": 1.0, "loss_pct": 0.0 },
+    { "id": "l_r2_r4", "a": "r2", "b": "r4", "metric": 20, "capacity_mbps": 100, "latency_ms": 5.0, "jitter_ms": 0.5, "loss_pct": 0.0 },
+    { "id": "l_r4_r5", "a": "r4", "b": "r5", "metric": 10, "capacity_mbps": 1000, "latency_ms": 2.0, "jitter_ms": 0.2, "loss_pct": 0.0 },
+    { "id": "l_r5_r6", "a": "r5", "b": "r6", "metric": 10, "capacity_mbps": 100, "latency_ms": 10.0, "jitter_ms": 1.0, "loss_pct": 0.0 }
+  ]
+}
