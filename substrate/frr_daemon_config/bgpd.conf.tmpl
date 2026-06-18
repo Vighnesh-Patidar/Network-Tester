@@ -1,0 +1,15 @@
+! bgpd configuration for node {{NODE_ID}}
+hostname {{NODE_ID}}
+!
+router bgp {{LOCAL_AS}}
+ bgp router-id {{ROUTER_ID}}
+ no bgp ebgp-requires-policy
+{{BGP_NEIGHBORS}}
+ !
+ address-family ipv4 unicast
+  network {{LOOPBACK}}/32
+  redistribute connected
+ exit-address-family
+!
+line vty
+!

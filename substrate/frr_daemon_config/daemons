@@ -1,0 +1,26 @@
+# FRR daemon control file. The substrate launches daemons explicitly per
+# namespace (see mininet_topology.py); this file documents the daemon set and
+# serves as a reference for a watchquagga/systemd-managed deployment.
+
+zebra=yes
+ospfd=yes
+bgpd=yes
+
+ospf6d=no
+ripd=no
+ripngd=no
+isisd=no
+pimd=no
+ldpd=no
+nhrpd=no
+eigrpd=no
+babeld=no
+sharpd=no
+staticd=yes
+bfdd=no
+fabricd=no
+
+vtysh_enable=yes
+zebra_options="  -A 127.0.0.1 -s 90000000"
+ospfd_options=" -A 127.0.0.1"
+bgpd_options="  -A 127.0.0.1"

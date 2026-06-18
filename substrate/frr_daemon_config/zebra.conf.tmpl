@@ -1,0 +1,13 @@
+! zebra configuration for node {{NODE_ID}}
+! Rendered per namespace by mininet_topology.py.
+hostname {{NODE_ID}}
+!
+! Advertise the node loopback so other routers have a stable destination prefix
+! that the Reference Topology Solver and Control-Plane Asserter key on.
+interface lo
+ ip address {{ROUTER_ID}}/32
+!
+ip forwarding
+!
+line vty
+!
