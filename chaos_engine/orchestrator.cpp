@@ -363,6 +363,35 @@ TestCaseResult ChaosOrchestrator::flapping_link() {
     result.passed = ok && cp.converged;
     result.detail = cp.converged ? "settled to the steady-state table after flapping"
                                  : "did not settle within the timeout";
+
+    // #region debug
+    if (!cp.converged && std::getenv("NCH_DEBUG") != nullptr) {
+        auto trim = [](std::string s) {
+            if (s.size() > 400) s.resize(400);
+            for (char& c : s) {
+                if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+            }
+            return s;
+        };
+        // Snapshot once at the failure point, then re-poll for a few seconds to
+        // measure when (if ever) the flapped link reconverges past the 8s budget.
+        for (int i = 0; i < 8; ++i) {
+            const CommandResult nbr = engine_.run_in_namespace(
+                link->a, {"vtysh", "--vty_socket", "/var/run/frr/" + link->a, "-c",
+                          "show ip ospf neighbor json"});
+            const CommandResult rt = engine_.run_in_namespace(
+                link->a, {"vtysh", "--vty_socket", "/var/run/frr/" + link->a, "-c",
+                          "show ip route ospf json"});
+            std::fprintf(stderr,
+                         "[nch-debug] flap post-state probe=%d node=%s link=%s set_ok=%d "
+                         "neighbors='%s' routes='%s'\n",
+                         i, link->a.c_str(), link->id.c_str(), static_cast<int>(ok),
+                         trim(nbr.stdout_data).c_str(), trim(rt.stdout_data).c_str());
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        }
+    }
+    // #endregion
+
     return result;
 }
 
