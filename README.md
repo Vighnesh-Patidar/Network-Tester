@@ -12,6 +12,14 @@ Design -> Commit -> Emulate -> Stabilize -> Attack -> Assert -> Report
 The design rationale lives in [`ARCHITECTURE.md`](ARCHITECTURE.md); this README
 covers building, running, and what each part does.
 
+![Chaos engine walking the lifecycle from topology through the test matrix to the exit-code gate](media/demo.gif)
+
+The topology below is rendered straight from [`topology.json`](topology.json):
+node colour reflects the configured protocol set, and edge weight and colour
+reflect each link's declared capacity.
+
+![Topology rendered from topology.json](media/topology.png)
+
 ## The single source of truth
 
 Everything rotates around [`topology.json`](topology.json). It encodes only the
@@ -80,6 +88,34 @@ sudo ./build/chaos_engine \
 The report records `data_plane_convergence_ms` and `control_plane_convergence_ms`
 separately for every case: these are distinct measurements (traffic resumption vs.
 routing-table update) and are never collapsed into one number.
+
+## Demo and visuals
+
+The images above are generated, not hand-drawn. `scripts/demo.sh` drives the
+engine through its lifecycle on the dry-run path and narrates each phase, printing
+the topology, the per-case matrix, and the exit-code gate; every number it shows is
+read back from the engine's own JSON report. The substrate-only measurements
+(`data_plane`/`control_plane_convergence_ms`) are reported as `-1` in dry-run, since
+they require a live host.
+
+```bash
+# Run the narrated walkthrough in your terminal.
+bash scripts/demo.sh
+
+# Regenerate every asset under media/ (topology diagram, GIF, hero still, cast).
+bash scripts/make_media.sh
+```
+
+| Asset | What it is |
+|---|---|
+| `media/demo.gif` | Scrolling terminal capture of the full lifecycle, ending on the pass/fail gate |
+| `media/demo_hero.png` | The same walkthrough as a single still image |
+| `media/demo.cast` | asciinema v2 cast (`asciinema play media/demo.cast`; convert with `agg`/`ffmpeg`) |
+| `media/topology.{png,svg}` | Graphviz rendering of `topology.json` |
+
+Regenerating the diagram needs Graphviz; the GIF and still need Python with Pillow.
+A recording of the visualizer authoring a topology, and a capture of the live
+Mininet/FRR matrix, are best produced on a desktop host with a display and root.
 
 ## Bringing up the substrate (privileged host only)
 
