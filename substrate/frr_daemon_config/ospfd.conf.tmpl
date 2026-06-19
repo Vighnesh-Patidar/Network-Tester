@@ -9,7 +9,14 @@ hostname {{NODE_ID}}
 router ospf
  ospf router-id {{ROUTER_ID}}
  redistribute connected
- timers throttle spf 0 50 5000
+ ! Fast SPF and LSA timers. The default MinLSInterval (5s) and SPF max-hold (5s)
+ ! mean a rapidly flapping link exhausts its LSA re-origination budget: the final
+ ! "link-up" Router-LSA is suppressed and never re-triggered, so SPF keeps routing
+ ! around a link whose adjacency is actually Full. Shrinking the throttles lets the
+ ! restored link be re-advertised and recomputed within the convergence budget.
+ timers throttle spf 0 50 200
+ timers throttle lsa all 50
+ timers lsa min-arrival 50
 {{OSPF_NETWORKS}}
 !
 line vty

@@ -367,26 +367,34 @@ TestCaseResult ChaosOrchestrator::flapping_link() {
     // #region debug
     if (!cp.converged && std::getenv("NCH_DEBUG") != nullptr) {
         auto trim = [](std::string s) {
-            if (s.size() > 400) s.resize(400);
+            if (s.size() > 1200) s.resize(1200);
             for (char& c : s) {
                 if (c == '\n' || c == '\r' || c == '\t') c = ' ';
             }
             return s;
         };
-        // Snapshot once at the failure point, then re-poll for a few seconds to
-        // measure when (if ever) the flapped link reconverges past the 8s budget.
-        for (int i = 0; i < 8; ++i) {
+        // The peer's loopback equals its router-id; that /32 is the prefix the
+        // asserter flagged as routed "via r4". Capture its exact nexthop plus the
+        // peer adjacency state and self-originated Router-LSA so a residual failure
+        // shows whether the link is stuck down, the adjacency is not Full, or the
+        // Router-LSA is stale.
+        const std::string peer_lo = address_plan_.loopback_prefix(link->b);
+        for (int i = 0; i < 6; ++i) {
             const CommandResult nbr = engine_.run_in_namespace(
                 link->a, {"vtysh", "--vty_socket", "/var/run/frr/" + link->a, "-c",
                           "show ip ospf neighbor json"});
             const CommandResult rt = engine_.run_in_namespace(
                 link->a, {"vtysh", "--vty_socket", "/var/run/frr/" + link->a, "-c",
-                          "show ip route ospf json"});
+                          "show ip route " + peer_lo + " json"});
+            const CommandResult lsa = engine_.run_in_namespace(
+                link->a, {"vtysh", "--vty_socket", "/var/run/frr/" + link->a, "-c",
+                          "show ip ospf database router self-originate json"});
             std::fprintf(stderr,
                          "[nch-debug] flap post-state probe=%d node=%s link=%s set_ok=%d "
-                         "neighbors='%s' routes='%s'\n",
+                         "peer_lo=%s neighbors='%s' route='%s' self_lsa='%s'\n",
                          i, link->a.c_str(), link->id.c_str(), static_cast<int>(ok),
-                         trim(nbr.stdout_data).c_str(), trim(rt.stdout_data).c_str());
+                         peer_lo.c_str(), trim(nbr.stdout_data).c_str(),
+                         trim(rt.stdout_data).c_str(), trim(lsa.stdout_data).c_str());
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
     }
