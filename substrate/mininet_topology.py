@@ -101,6 +101,7 @@ def write_frr_configs(node, node_index, topology, config_root, run_dir):
     """Writes per-node zebra/ospfd/bgpd configs from the templates."""
     node_dir = os.path.join(run_dir, node["id"])
     os.makedirs(node_dir, exist_ok=True)
+    os.chmod(node_dir, 0o755)
 
     protocols = node.get("protocols", [])
     router_id = loopback_ip(node_index)
@@ -121,8 +122,10 @@ def write_frr_configs(node, node_index, topology, config_root, run_dir):
         os.path.join(config_root, "zebra.conf.tmpl"),
         {"NODE_ID": node["id"], "ROUTER_ID": router_id},
     )
-    with open(os.path.join(node_dir, "zebra.conf"), "w", encoding="utf-8") as handle:
+    zebra_path = os.path.join(node_dir, "zebra.conf")
+    with open(zebra_path, "w", encoding="utf-8") as handle:
         handle.write(zebra)
+    os.chmod(zebra_path, 0o644)
 
     if "ospf" in protocols:
         ospfd = render_config(
@@ -133,8 +136,10 @@ def write_frr_configs(node, node_index, topology, config_root, run_dir):
                 "OSPF_NETWORKS": network_stanza,
             },
         )
-        with open(os.path.join(node_dir, "ospfd.conf"), "w", encoding="utf-8") as handle:
+        ospfd_path = os.path.join(node_dir, "ospfd.conf")
+        with open(ospfd_path, "w", encoding="utf-8") as handle:
             handle.write(ospfd)
+        os.chmod(ospfd_path, 0o644)
 
     if "bgp" in protocols:
         neighbor_lines = []
@@ -161,8 +166,10 @@ def write_frr_configs(node, node_index, topology, config_root, run_dir):
                 "LOOPBACK": router_id,
             },
         )
-        with open(os.path.join(node_dir, "bgpd.conf"), "w", encoding="utf-8") as handle:
+        bgpd_path = os.path.join(node_dir, "bgpd.conf")
+        with open(bgpd_path, "w", encoding="utf-8") as handle:
             handle.write(bgpd)
+        os.chmod(bgpd_path, 0o644)
 
     return node_dir
 
@@ -264,6 +271,22 @@ def build(topology_path, config_root, shaper_cli):
     topology = load_topology(topology_path)
     plan = assign_interfaces(topology)
     run_dir = tempfile.mkdtemp(prefix="nch-substrate-")
+    # #region debug
+    sys.stderr.write(
+        "[nch-debug] run_dir={} orig_mode={:o}\n".format(
+            run_dir, os.stat(run_dir).st_mode & 0o777
+        )
+    )
+    # #endregion
+    # The FRR daemons drop privileges to the frr user, so the config tree they read
+    # must be traversable by that user; mkdtemp creates it 0700 and root-owned.
+    os.chmod(run_dir, 0o755)
+    # #region debug
+    sys.stderr.write(
+        "[nch-debug] run_dir new_mode={:o}\n".format(os.stat(run_dir).st_mode & 0o777)
+    )
+    sys.stderr.flush()
+    # #endregion
 
     net = Mininet(switch=OVSSwitch, link=TCLink, controller=None)
 

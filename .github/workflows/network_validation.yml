@@ -70,6 +70,13 @@ jobs:
           ps -ef | grep -E 'zebra|ospfd|bgpd' | grep -v grep
           echo "===== /var/run/frr (recursive) ====="
           sudo ls -laR /var/run/frr
+          echo "===== config dir mode ====="
+          sudo ls -ld /tmp/nch-substrate-*
+          echo "===== r1 ospfd.conf ====="
+          sudo cat /tmp/nch-substrate-*/r1/ospfd.conf
+          echo "===== frr can read r1 ospfd.conf? ====="
+          sudo -u frr cat /tmp/nch-substrate-*/r1/ospfd.conf >/dev/null 2>&1 \
+            && echo READABLE_BY_FRR || echo NOT_READABLE_BY_FRR
           echo "===== r1 interfaces ====="
           sudo ip netns exec r1 ip -br addr
           echo "===== r1 ospf neighbor (plain) ====="
