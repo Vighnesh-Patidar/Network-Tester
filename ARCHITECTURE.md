@@ -16,7 +16,7 @@ Design → Commit → Emulate → Stabilize → Attack → Assert → Report
 
 This is a full-stack infrastructure validation pipeline that treats network topologies as verifiable code. It spans three execution domains: a local visual authoring tool, a cloud-based CI/CD pipeline, and a Linux kernel network-namespace emulation substrate driven by a C++ chaos engine.
 
-A `Stabilize` phase has been added between `Emulate` and `Attack` relative to the original design — see §6.1 for why this is not optional.
+A `Stabilize` phase has been added between `Emulate` and `Attack` relative to the original design — see §4.6 and §5.1 for why this is not optional.
 
 ---
 
@@ -73,7 +73,7 @@ A lightweight, immediate-mode C++ desktop application used to design test topolo
 
 - **Kernel Isolation** — Linux network namespaces (`netns`) partition the runner into independent routing entities.
 - **Virtual Wiring** — `veth` pairs bridged through Open vSwitch.
-- **Distributed State Machines** — each namespace runs its own FRR daemon set (`zebra`, `ospfd`, `bgpd`).
+- **Distributed State Machines** — each namespace runs its own FRR daemon set (`zebra`, `ospfd`, `bgpd`). Every link is a /30 between exactly two routers, so OSPF interfaces are configured `point-to-point` (`substrate/frr_daemon_config/ospfd.conf.tmpl`): this skips broadcast DR election and its wait timer. Fast `hello-interval 1` / `dead-interval 4` timers and `timers throttle spf 0 50 5000` keep failure detection and re-SPF well inside the convergence budget.
 - **Link Shaper** — new component, §5.6. Applies each link's user-specified `capacity_mbps`/`latency_ms`/`jitter_ms`/`loss_pct` (§1.1) to the corresponding `veth` interface via `tc qdisc`, so the substrate's link behaviour matches the topology's declared capability profile rather than the runner's incidental defaults.
 - **Stabilization Gate** — new component, §6.1. Blocks the pipeline from proceeding to Tier 4 until the network has reached an initial converged state, verified by polling daemon adjacency status rather than a fixed sleep.
 
@@ -234,8 +234,31 @@ private:
 | Single link failure (BGP) | Same, on an eBGP session link | Reconvergence within timeout; resulting path is loop-free and policy-consistent |
 | Node failure | Kill all FRR daemons in one namespace | Neighbors detect failure, reconverge around the dead node |
 | Asymmetric packet loss | `tc qdisc` induced loss on a link, not full down | Data-plane telemetry correctly distinguishes degraded-but-up from down |
-| Flapping link | Repeated up/down on a short interval | No route oscillation beyond a bounded settling period (dampening behaviour, if configured, is honoured) |
+| Flapping link | Several rapid sub-second up/down cycles, then one settle cycle whose down phase outlasts the OSPF dead-interval | The table returns to the steady-state `ReferenceTopologySolver` output within the convergence budget (see the flap convergence contract below) |
 | Failover under capacity constraint | Primary link down; backup link's declared `capacity_mbps` is already near saturation from background traffic generated during the test | Reconvergence still completes within timeout; data-plane telemetry reports actual achieved throughput on the backup path against its declared capacity, not just binary up/down |
+
+### 6.1 Matrix execution — per-case isolation and ordering
+
+Each case asserts against a freshly converged baseline. Before every case on the
+live path the orchestrator *heals* the substrate — it brings every link back up
+and re-runs the Stabilization Gate (§5.1) — so a case never inherits the damage
+left by the previous one. CI runs the matrix with an 8 s per-case convergence
+budget and a 60 s stabilization budget.
+
+The one exception to per-case healing is **node failure**, which kills the FRR
+daemon set inside a namespace. The engine cannot relaunch those daemons, so
+healing cannot restore that node; node failure therefore runs **last**, where the
+state it destroys harms no subsequent case.
+
+**Flap convergence contract.** The rapid sub-second toggles in the flapping-link
+case all stay under the 4 s OSPF dead-interval, so the remote end never drops the
+adjacency: only the local interface bounces, the two link-state databases never do
+a clean from-scratch re-exchange, and the local router can be left holding a stale
+copy of the peer's Router-LSA (SPF then routes around a link whose adjacency is
+actually `Full`). The case therefore finishes the flap with a single settle cycle
+whose down phase (5.5 s) outlasts the dead-interval, forcing both ends to fully
+tear the adjacency down and re-exchange databases on the final bring-up, so SPF
+reuses the restored link and the table matches the solver's steady state.
 
 ---
 
