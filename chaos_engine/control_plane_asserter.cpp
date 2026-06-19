@@ -1,6 +1,8 @@
 #include "control_plane_asserter.h"
 
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <thread>
 
 #include <nlohmann/json.hpp>
@@ -133,6 +135,12 @@ ControlPlaneResult ControlPlaneAsserter::await_ospf_convergence(
             result.elapsed_ms =
                 std::chrono::duration<double, std::milli>(now - start).count();
             result.detail = mismatch;
+            // #region debug
+            if (std::getenv("NCH_DEBUG") != nullptr) {
+                std::fprintf(stderr, "[nch-debug] ospf convergence timeout: %s\n",
+                             mismatch.c_str());
+            }
+            // #endregion
             return result;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms_));

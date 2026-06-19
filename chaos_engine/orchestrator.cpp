@@ -1,6 +1,8 @@
 #include "orchestrator.h"
 
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <thread>
 
 #include "data_plane_telemetry.h"
@@ -448,6 +450,15 @@ TestCaseResult ChaosOrchestrator::failover_under_capacity() {
     return result;
 }
 
+void ChaosOrchestrator::heal_and_stabilize() {
+    for (const auto& link : topology_.links) {
+        engine_.set_link_state(link.a, address_plan_.interface_name(link.id, link.a), true);
+        engine_.set_link_state(link.b, address_plan_.interface_name(link.id, link.b), true);
+    }
+    StabilizationGate gate(engine_);
+    gate.wait_for_convergence(topology_, config_.stabilization_timeout_ms);
+}
+
 ConvergenceReport ChaosOrchestrator::run() {
     ConvergenceReport report;
     report.topology_path = config_.topology_path;
@@ -465,12 +476,22 @@ ConvergenceReport ChaosOrchestrator::run() {
         }
     }
 
-    report.cases.push_back(single_link_failure_ospf());
-    report.cases.push_back(single_link_failure_bgp());
+    // Each case asserts against a freshly converged baseline, so the link-failure
+    // cases heal what they broke before the next runs. node_failure kills daemons
+    // the engine cannot relaunch, so it runs last where its damage harms nothing.
+    auto run_case = [&](TestCaseResult (ChaosOrchestrator::*test)()) {
+        if (!config_.dry_run) {
+            heal_and_stabilize();
+        }
+        report.cases.push_back((this->*test)());
+    };
+
+    run_case(&ChaosOrchestrator::single_link_failure_ospf);
+    run_case(&ChaosOrchestrator::single_link_failure_bgp);
+    run_case(&ChaosOrchestrator::flapping_link);
+    run_case(&ChaosOrchestrator::failover_under_capacity);
+    run_case(&ChaosOrchestrator::asymmetric_packet_loss);
     report.cases.push_back(node_failure());
-    report.cases.push_back(asymmetric_packet_loss());
-    report.cases.push_back(flapping_link());
-    report.cases.push_back(failover_under_capacity());
     return report;
 }
 

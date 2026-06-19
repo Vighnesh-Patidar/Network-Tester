@@ -48,6 +48,11 @@ private:
     bool all_ospf_pairs_reachable(const std::vector<std::string>& down_links) const;
     bool path_changed(const RoutingTable& before, const RoutingTable& after) const;
 
+    // Returns the substrate to a pristine, fully converged baseline between test
+    // cases: every link is brought back up and the stabilization gate is re-run.
+    // Without this, a downed link from one case silently corrupts the next.
+    void heal_and_stabilize();
+
     TestCaseResult single_link_failure_ospf();
     TestCaseResult single_link_failure_bgp();
     TestCaseResult node_failure();
