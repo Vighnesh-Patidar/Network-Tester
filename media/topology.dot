@@ -1,0 +1,22 @@
+graph topology {
+  bgcolor="#0d1117";
+  layout=neato; overlap=false; splines=true; sep="+18";
+  fontname="DejaVu Sans"; fontcolor="#c9d1d9"; fontsize=20;
+  label="network-chaos-harness  -  sample topology\nsolid green = 1 Gbps core    dashed grey = 100 Mbps    dashed red = capacity-limited backup";
+  labelloc=t;
+  node [shape=circle, style="filled", fixedsize=true, width=0.95, fontname="DejaVu Sans Bold", fontsize=13, fontcolor="white", penwidth=2, color="#0d1117"];
+  edge [fontname="DejaVu Sans Mono", fontsize=10, fontcolor="#c9d1d9"];
+  "r1" [label="r1\nOSPF", fillcolor="#1f6feb"];
+  "r2" [label="r2\nOSPF", fillcolor="#1f6feb"];
+  "r3" [label="r3\nOSPF", fillcolor="#1f6feb"];
+  "r4" [label="r4\nOSPF", fillcolor="#1f6feb"];
+  "r5" [label="r5\nAS65001", fillcolor="#2ea043"];
+  "r6" [label="r6\nAS65002", fillcolor="#d29922"];
+  "r1" -- "r2" [label="m10\n1000Mb", penwidth="3.0", color="#3fb950"];
+  "r2" -- "r3" [label="m10\n1000Mb", penwidth="3.0", color="#3fb950"];
+  "r3" -- "r4" [label="m10\n1000Mb", penwidth="3.0", color="#3fb950"];
+  "r1" -- "r4" [label="m30\n100Mb", penwidth="1.4", color="#8b949e", style="dashed"];
+  "r2" -- "r4" [label="m20\n100Mb", penwidth="1.4", color="#8b949e", style="dashed"];
+  "r4" -- "r5" [label="m10\n1000Mb", penwidth="3.0", color="#3fb950"];
+  "r5" -- "r6" [label="m10\n100Mb", penwidth="1.4", color="#8b949e", style="dashed"];
+}
