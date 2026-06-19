@@ -2,22 +2,10 @@ name: network-validation
 
 on:
   push:
-    paths:
-      - "topology.json"
-      - "chaos_engine/**"
-      - "substrate/**"
-      - "common/**"
-      - "visualizer/**"
-      - "tests/**"
-      - "CMakeLists.txt"
-      - ".github/workflows/network_validation.yml"
+    branches:
+      - main
   pull_request:
-    paths:
-      - "topology.json"
-      - "chaos_engine/**"
-      - "substrate/**"
-      - "common/**"
-      - "CMakeLists.txt"
+  workflow_dispatch:
 
 jobs:
   build-and-unit-test:
