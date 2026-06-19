@@ -36,6 +36,13 @@ except ImportError:  # pragma: no cover - only available on a substrate host
 
 FRR_DAEMONS = ("zebra", "ospfd", "bgpd")
 
+NETNS_DIR = "/var/run/netns"
+FRR_RUN_ROOT = "/var/run/frr"
+
+
+def frr_run_dir(node_id):
+    return "{}/{}".format(FRR_RUN_ROOT, node_id)
+
 
 def loopback_ip(node_index):
     return "10.255.0.{}".format(node_index + 1)
@@ -200,20 +207,52 @@ def _apply_tc_inline(host, iface, link):
 
 
 def start_frr(host, node_dir):
-    """Starts the daemon set in dependency order: zebra first."""
-    host.cmd("mkdir -p /var/run/frr")
-    host.cmd("chown frr:frr /var/run/frr || true")
+    """Starts the daemon set in dependency order: zebra first.
+
+    Each node gets a private FRR runtime directory so the per-daemon vty and
+    zserv sockets do not collide: every host shares the root mount namespace, so
+    a single /var/run/frr would let one node's sockets shadow the others'. The
+    chaos engine resolves the same directory when it shells out to vtysh.
+    """
+    run_dir = frr_run_dir(host.name)
+    zserv = "{}/zserv.api".format(run_dir)
+    host.cmd("mkdir -p {}".format(run_dir))
+    host.cmd("chown -R frr:frr {} || true".format(run_dir))
     for daemon in FRR_DAEMONS:
         config = os.path.join(node_dir, "{}.conf".format(daemon))
         if not os.path.exists(config):
             continue
         binary = shutil.which(daemon) or "/usr/lib/frr/{}".format(daemon)
         host.cmd(
-            "{} -f {} -d -i /var/run/frr/{}-{}.pid "
-            "-z /var/run/frr/{}.zserv.api".format(
-                binary, config, host.name, daemon, host.name
+            "{} -f {} -d -i {}/{}.pid -z {} --vty_socket {}".format(
+                binary, config, run_dir, daemon, zserv, run_dir
             )
         )
+
+
+def register_namespaces(hosts):
+    """Exposes each Mininet host's network namespace under /var/run/netns.
+
+    Mininet keeps hosts in anonymous namespaces, so `ip netns exec <id>` (used by
+    the chaos engine to inject failures and poll vtysh) cannot find them. Linking
+    /proc/<pid>/ns/net into /var/run/netns gives iproute2 a name to attach to.
+    """
+    os.makedirs(NETNS_DIR, exist_ok=True)
+    for node_id, (host, _index) in hosts.items():
+        link = os.path.join(NETNS_DIR, node_id)
+        if os.path.lexists(link):
+            os.remove(link)
+        os.symlink("/proc/{}/ns/net".format(host.pid), link)
+
+
+def cleanup_substrate(net):
+    net.stop()
+    for host in net.hosts:
+        link = os.path.join(NETNS_DIR, host.name)
+        try:
+            os.remove(link)
+        except OSError:
+            pass
 
 
 def build(topology_path, config_root, shaper_cli):
@@ -245,6 +284,7 @@ def build(topology_path, config_root, shaper_cli):
         net.addLink(host_b, backplane, intfName1=entry["iface_b"])
 
     net.start()
+    register_namespaces(hosts)
 
     for entry in plan:
         host_a, _ = hosts[entry["link"]["a"]]
@@ -288,12 +328,12 @@ def main():
         from mininet.cli import CLI
 
         CLI(net)
-        net.stop()
+        cleanup_substrate(net)
     elif sys.stdin.isatty():
         try:
             sys.stdin.read()
         finally:
-            net.stop()
+            cleanup_substrate(net)
     else:
         # Backgrounded (e.g. in CI) there is no terminal to read from, so wait
         # for a termination signal instead of stdin EOF. Reading stdin here would
@@ -302,7 +342,7 @@ def main():
         import signal
 
         def teardown(signum, frame):
-            net.stop()
+            cleanup_substrate(net)
             sys.exit(0)
 
         signal.signal(signal.SIGTERM, teardown)

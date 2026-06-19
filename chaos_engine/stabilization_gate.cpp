@@ -79,7 +79,8 @@ AdjacencyStatus StabilizationGate::poll_ospf_neighbors(const std::string& node_n
     status.expected = expected_neighbors;
 
     const CommandResult result = engine_.run_in_namespace(
-        node_ns, {"vtysh", "-c", "show ip ospf neighbor json"});
+        node_ns, {"vtysh", "--vty_socket", "/var/run/frr/" + node_ns, "-c",
+                  "show ip ospf neighbor json"});
     if (!result.ok()) {
         return status;
     }
@@ -99,8 +100,9 @@ AdjacencyStatus StabilizationGate::poll_bgp_peers(const std::string& node_ns,
     AdjacencyStatus status;
     status.expected = expected_peers;
 
-    const CommandResult result =
-        engine_.run_in_namespace(node_ns, {"vtysh", "-c", "show bgp summary json"});
+    const CommandResult result = engine_.run_in_namespace(
+        node_ns, {"vtysh", "--vty_socket", "/var/run/frr/" + node_ns, "-c",
+                  "show bgp summary json"});
     if (!result.ok()) {
         return status;
     }

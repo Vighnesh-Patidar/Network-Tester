@@ -66,8 +66,9 @@ RoutingTable ControlPlaneAsserter::snapshot_ospf_routes(const Topology& topology
         if (!node.runs(Protocol::Ospf)) {
             continue;
         }
-        const CommandResult result =
-            engine_.run_in_namespace(node.id, {"vtysh", "-c", "show ip route json"});
+        const CommandResult result = engine_.run_in_namespace(
+            node.id, {"vtysh", "--vty_socket", "/var/run/frr/" + node.id, "-c",
+                      "show ip route json"});
         if (!result.ok()) {
             continue;
         }
