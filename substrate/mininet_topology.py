@@ -289,11 +289,25 @@ def main():
 
         CLI(net)
         net.stop()
-    else:
+    elif sys.stdin.isatty():
         try:
             sys.stdin.read()
         finally:
             net.stop()
+    else:
+        # Backgrounded (e.g. in CI) there is no terminal to read from, so wait
+        # for a termination signal instead of stdin EOF. Reading stdin here would
+        # return immediately and tear the substrate down before the chaos engine
+        # ever runs against it.
+        import signal
+
+        def teardown(signum, frame):
+            net.stop()
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, teardown)
+        signal.signal(signal.SIGINT, teardown)
+        signal.pause()
 
 
 if __name__ == "__main__":
