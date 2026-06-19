@@ -367,35 +367,38 @@ TestCaseResult ChaosOrchestrator::flapping_link() {
     // #region debug
     if (!cp.converged && std::getenv("NCH_DEBUG") != nullptr) {
         auto trim = [](std::string s) {
-            if (s.size() > 1200) s.resize(1200);
+            if (s.size() > 480) s.resize(480);
             for (char& c : s) {
                 if (c == '\n' || c == '\r' || c == '\t') c = ' ';
             }
             return s;
         };
-        // The peer's loopback equals its router-id; that /32 is the prefix the
-        // asserter flagged as routed "via r4". Capture its exact nexthop plus the
-        // peer adjacency state and self-originated Router-LSA so a residual failure
-        // shows whether the link is stuck down, the adjacency is not Full, or the
-        // Router-LSA is stale.
-        const std::string peer_lo = address_plan_.loopback_prefix(link->b);
-        for (int i = 0; i < 6; ++i) {
-            const CommandResult nbr = engine_.run_in_namespace(
-                link->a, {"vtysh", "--vty_socket", "/var/run/frr/" + link->a, "-c",
-                          "show ip ospf neighbor json"});
-            const CommandResult rt = engine_.run_in_namespace(
-                link->a, {"vtysh", "--vty_socket", "/var/run/frr/" + link->a, "-c",
-                          "show ip route " + peer_lo + " json"});
-            const CommandResult lsa = engine_.run_in_namespace(
-                link->a, {"vtysh", "--vty_socket", "/var/run/frr/" + link->a, "-c",
-                          "show ip ospf database router self-originate json"});
-            std::fprintf(stderr,
-                         "[nch-debug] flap post-state probe=%d node=%s link=%s set_ok=%d "
-                         "peer_lo=%s neighbors='%s' route='%s' self_lsa='%s'\n",
-                         i, link->a.c_str(), link->id.c_str(), static_cast<int>(ok),
-                         peer_lo.c_str(), trim(nbr.stdout_data).c_str(),
-                         trim(rt.stdout_data).c_str(), trim(lsa.stdout_data).c_str());
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        // The adjacency is Full but SPF routes around the link, so the link is not
+        // reciprocated in both Router-LSAs. Capture BOTH ends' neighbor view and
+        // self-originated Router-LSA (each on its own short line so the CI log does
+        // not truncate them) to see which side fails to re-advertise the link.
+        auto vt = [&](const std::string& ns, const std::string& cmd) {
+            return engine_.run_in_namespace(
+                ns, {"vtysh", "--vty_socket", "/var/run/frr/" + ns, "-c", cmd});
+        };
+        for (int i = 0; i < 4; ++i) {
+            std::fprintf(stderr, "[nch-debug] flap probe=%d %s-nbr='%s'\n", i,
+                         link->a.c_str(),
+                         trim(vt(link->a, "show ip ospf neighbor json").stdout_data).c_str());
+            std::fprintf(stderr, "[nch-debug] flap probe=%d %s-nbr='%s'\n", i,
+                         link->b.c_str(),
+                         trim(vt(link->b, "show ip ospf neighbor json").stdout_data).c_str());
+            std::fprintf(stderr, "[nch-debug] flap probe=%d %s-lsa='%s'\n", i,
+                         link->a.c_str(),
+                         trim(vt(link->a, "show ip ospf database router self-originate json")
+                                  .stdout_data)
+                             .c_str());
+            std::fprintf(stderr, "[nch-debug] flap probe=%d %s-lsa='%s'\n", i,
+                         link->b.c_str(),
+                         trim(vt(link->b, "show ip ospf database router self-originate json")
+                                  .stdout_data)
+                             .c_str());
+            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
         }
     }
     // #endregion
