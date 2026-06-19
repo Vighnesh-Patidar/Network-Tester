@@ -1,12 +1,16 @@
 ! ospfd configuration for node {{NODE_ID}}
 hostname {{NODE_ID}}
 !
+! Every link is a /30 between exactly two routers, so each interface is treated as
+! point-to-point: this skips broadcast DR election (and its wait timer), letting
+! adjacencies reach Full and reconverge within the test's convergence budget. Fast
+! hello/dead timers keep failure detection well under convergence_timeout_ms.
+{{OSPF_INTERFACES}}
 router ospf
  ospf router-id {{ROUTER_ID}}
  redistribute connected
+ timers throttle spf 0 50 5000
 {{OSPF_NETWORKS}}
 !
-! Faster timers keep convergence measurements bounded in CI while staying within
-! safe operational ranges; tune alongside convergence_timeout_ms.
 line vty
 !

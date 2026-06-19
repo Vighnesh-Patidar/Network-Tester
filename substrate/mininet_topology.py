@@ -97,7 +97,7 @@ def render_config(template_path, substitutions):
     return text
 
 
-def write_frr_configs(node, node_index, topology, config_root, run_dir):
+def write_frr_configs(node, node_index, topology, config_root, run_dir, plan):
     """Writes per-node zebra/ospfd/bgpd configs from the templates."""
     node_dir = os.path.join(run_dir, node["id"])
     os.makedirs(node_dir, exist_ok=True)
@@ -105,6 +105,7 @@ def write_frr_configs(node, node_index, topology, config_root, run_dir):
 
     protocols = node.get("protocols", [])
     router_id = loopback_ip(node_index)
+    node_protocols = {n["id"]: n.get("protocols", []) for n in topology["nodes"]}
 
     ospf_networks = []
     for link_index, link in enumerate(topology["links"]):
@@ -116,6 +117,25 @@ def write_frr_configs(node, node_index, topology, config_root, run_dir):
     network_stanza = "\n".join(
         " network {} area {}".format(net, node.get("ospf_area", "0.0.0.0"))
         for net in ospf_networks
+    )
+
+    # Point-to-point interfaces (both ends speak OSPF) skip DR election entirely.
+    ospf_interfaces = []
+    for entry in plan:
+        link = entry["link"]
+        if link["a"] == node["id"]:
+            iface, other = entry["iface_a"], link["b"]
+        elif link["b"] == node["id"]:
+            iface, other = entry["iface_b"], link["a"]
+        else:
+            continue
+        if "ospf" in protocols and "ospf" in node_protocols.get(other, []):
+            ospf_interfaces.append(iface)
+
+    interface_stanza = "\n".join(
+        "interface {}\n ip ospf network point-to-point\n"
+        " ip ospf hello-interval 1\n ip ospf dead-interval 4\n!".format(iface)
+        for iface in ospf_interfaces
     )
 
     zebra = render_config(
@@ -134,6 +154,7 @@ def write_frr_configs(node, node_index, topology, config_root, run_dir):
                 "NODE_ID": node["id"],
                 "ROUTER_ID": router_id,
                 "OSPF_NETWORKS": network_stanza,
+                "OSPF_INTERFACES": interface_stanza,
             },
         )
         ospfd_path = os.path.join(node_dir, "ospfd.conf")
@@ -322,7 +343,7 @@ def build(topology_path, config_root, shaper_cli):
         host.cmd("ip addr add {}/32 dev lo".format(loopback_ip(index)))
         host.cmd("sysctl -w net.ipv4.ip_forward=1")
         node = topology["nodes"][index]
-        node_dir = write_frr_configs(node, index, topology, config_root, run_dir)
+        node_dir = write_frr_configs(node, index, topology, config_root, run_dir, plan)
         start_frr(host, node_dir)
 
     info("substrate is up; run the chaos engine, then press Ctrl-D to tear down\n")
