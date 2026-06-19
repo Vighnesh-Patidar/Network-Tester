@@ -21,7 +21,7 @@ RoutingTable ControlPlaneAsserter::parse_node_routes(const std::string& source,
     // "show ip route json" is an object keyed by prefix; each value is an array of
     // candidate routes. We only care about destination loopback /32s.
     for (const auto& entry : doc.items()) {
-        const std::string& prefix = entry.first;
+        const std::string& prefix = entry.key();
         std::string dest;
         for (const auto& node : topology.nodes) {
             if (address_plan_.loopback_prefix(node.id) == prefix) {
@@ -33,7 +33,7 @@ RoutingTable ControlPlaneAsserter::parse_node_routes(const std::string& source,
             continue;
         }
 
-        const nlohmann::json& candidates = entry.second;
+        const nlohmann::json& candidates = entry.value();
         if (!candidates.is_array() || candidates.empty()) {
             continue;
         }

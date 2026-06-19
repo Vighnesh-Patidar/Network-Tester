@@ -20,7 +20,7 @@ int count_full_ospf_neighbors(const nlohmann::json& doc) {
     }
     const nlohmann::json& neighbors = doc.at("neighbors");
     for (const auto& entry : neighbors.items()) {
-        const nlohmann::json& value = entry.second;
+        const nlohmann::json& value = entry.value();
         // Each router id maps to an array of adjacency records.
         if (value.is_array()) {
             for (const auto& record : value) {
@@ -45,7 +45,7 @@ int count_established_bgp_peers(const nlohmann::json& doc) {
         return 0;
     }
     for (const auto& entry : doc.at("peers").items()) {
-        const nlohmann::json& peer = entry.second;
+        const nlohmann::json& peer = entry.value();
         std::string state = peer.value("state", peer.value("bgpState", ""));
         if (is_established(bgp_state_from_string(state))) {
             ++established;

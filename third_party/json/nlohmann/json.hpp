@@ -283,11 +283,31 @@ public:
         return obj_;
     }
 
-    // Mirrors nlohmann::json::items(): a key/value view over an object.
+    // Mirrors nlohmann::json::items(): a key/value view over an object. The
+    // dereferenced element exposes key()/value() like upstream nlohmann::json,
+    // rather than the underlying map pair's first/second, so call sites use the
+    // same accessors regardless of which header backs the build.
     struct items_proxy {
         const object_t* obj;
-        object_t::const_iterator begin() const { return obj->begin(); }
-        object_t::const_iterator end() const { return obj->end(); }
+
+        struct value_type {
+            object_t::const_iterator it;
+            const std::string& key() const { return it->first; }
+            const json& value() const { return it->second; }
+        };
+
+        struct iterator {
+            object_t::const_iterator it;
+            iterator& operator++() {
+                ++it;
+                return *this;
+            }
+            bool operator!=(const iterator& other) const { return it != other.it; }
+            value_type operator*() const { return value_type{it}; }
+        };
+
+        iterator begin() const { return iterator{obj->begin()}; }
+        iterator end() const { return iterator{obj->end()}; }
     };
 
     items_proxy items() const {
