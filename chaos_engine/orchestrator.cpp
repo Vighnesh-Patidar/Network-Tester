@@ -1,8 +1,6 @@
 #include "orchestrator.h"
 
 #include <chrono>
-#include <cstdio>
-#include <cstdlib>
 #include <thread>
 
 #include "data_plane_telemetry.h"
@@ -353,6 +351,20 @@ TestCaseResult ChaosOrchestrator::flapping_link() {
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
     }
 
+    // The sub-second toggles above stay under the 4s OSPF dead-interval, so the
+    // remote end never drops the adjacency: only the local interface bounces, the
+    // two LSDBs never do a clean from-scratch re-exchange, and the local router is
+    // left holding a stale copy of the peer's Router-LSA (SPF then routes around a
+    // link whose adjacency is actually Full). Finish the flap with one settle cycle
+    // whose down phase outlasts the dead-interval (see dead-interval in
+    // ospfd.conf.tmpl) so both ends fully tear down and re-exchange databases on the
+    // final bring-up.
+    ok = engine_.set_link_state(link->a, iface_a, false).exited && ok;
+    ok = engine_.set_link_state(link->b, iface_b, false).exited && ok;
+    std::this_thread::sleep_for(std::chrono::milliseconds(5500));
+    ok = engine_.set_link_state(link->a, iface_a, true).exited && ok;
+    ok = engine_.set_link_state(link->b, iface_b, true).exited && ok;
+
     const RoutingTable expected = solver_.compute_expected_ospf_state(topology_);
     ControlPlaneAsserter asserter(engine_, address_plan_);
     const ControlPlaneResult cp =
@@ -363,46 +375,6 @@ TestCaseResult ChaosOrchestrator::flapping_link() {
     result.passed = ok && cp.converged;
     result.detail = cp.converged ? "settled to the steady-state table after flapping"
                                  : "did not settle within the timeout";
-
-    // #region debug
-    if (!cp.converged && std::getenv("NCH_DEBUG") != nullptr) {
-        auto trim = [](std::string s) {
-            if (s.size() > 480) s.resize(480);
-            for (char& c : s) {
-                if (c == '\n' || c == '\r' || c == '\t') c = ' ';
-            }
-            return s;
-        };
-        // The adjacency is Full but SPF routes around the link, so the link is not
-        // reciprocated in both Router-LSAs. Capture BOTH ends' neighbor view and
-        // self-originated Router-LSA (each on its own short line so the CI log does
-        // not truncate them) to see which side fails to re-advertise the link.
-        auto vt = [&](const std::string& ns, const std::string& cmd) {
-            return engine_.run_in_namespace(
-                ns, {"vtysh", "--vty_socket", "/var/run/frr/" + ns, "-c", cmd});
-        };
-        for (int i = 0; i < 4; ++i) {
-            std::fprintf(stderr, "[nch-debug] flap probe=%d %s-nbr='%s'\n", i,
-                         link->a.c_str(),
-                         trim(vt(link->a, "show ip ospf neighbor json").stdout_data).c_str());
-            std::fprintf(stderr, "[nch-debug] flap probe=%d %s-nbr='%s'\n", i,
-                         link->b.c_str(),
-                         trim(vt(link->b, "show ip ospf neighbor json").stdout_data).c_str());
-            std::fprintf(stderr, "[nch-debug] flap probe=%d %s-lsa='%s'\n", i,
-                         link->a.c_str(),
-                         trim(vt(link->a, "show ip ospf database router self-originate json")
-                                  .stdout_data)
-                             .c_str());
-            std::fprintf(stderr, "[nch-debug] flap probe=%d %s-lsa='%s'\n", i,
-                         link->b.c_str(),
-                         trim(vt(link->b, "show ip ospf database router self-originate json")
-                                  .stdout_data)
-                             .c_str());
-            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-        }
-    }
-    // #endregion
-
     return result;
 }
 

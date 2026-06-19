@@ -292,22 +292,9 @@ def build(topology_path, config_root, shaper_cli):
     topology = load_topology(topology_path)
     plan = assign_interfaces(topology)
     run_dir = tempfile.mkdtemp(prefix="nch-substrate-")
-    # #region debug
-    sys.stderr.write(
-        "[nch-debug] run_dir={} orig_mode={:o}\n".format(
-            run_dir, os.stat(run_dir).st_mode & 0o777
-        )
-    )
-    # #endregion
     # The FRR daemons drop privileges to the frr user, so the config tree they read
     # must be traversable by that user; mkdtemp creates it 0700 and root-owned.
     os.chmod(run_dir, 0o755)
-    # #region debug
-    sys.stderr.write(
-        "[nch-debug] run_dir new_mode={:o}\n".format(os.stat(run_dir).st_mode & 0o777)
-    )
-    sys.stderr.flush()
-    # #endregion
 
     net = Mininet(switch=OVSSwitch, link=TCLink, controller=None)
 

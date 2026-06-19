@@ -1,8 +1,6 @@
 #include "stabilization_gate.h"
 
 #include <chrono>
-#include <cstdio>
-#include <cstdlib>
 #include <thread>
 
 #include <nlohmann/json.hpp>
@@ -12,20 +10,6 @@
 namespace nch {
 
 namespace {
-
-// #region debug
-std::string nch_dbg_trim(std::string s) {
-    if (s.size() > 240) {
-        s.resize(240);
-    }
-    for (char& c : s) {
-        if (c == '\n' || c == '\r' || c == '\t') {
-            c = ' ';
-        }
-    }
-    return s;
-}
-// #endregion
 
 // FRR's JSON schema has shifted across releases, so the counters tolerate both
 // "state"/"nbrState" (OSPF) and the per-peer "state"/"bgpState" (BGP) spellings.
@@ -109,19 +93,6 @@ AdjacencyStatus StabilizationGate::poll_ospf_neighbors(const std::string& node_n
         status.query_ok = false;
     }
 
-    // #region debug
-    static int nch_dbg_ospf = 0;
-    if (std::getenv("NCH_DEBUG") != nullptr && nch_dbg_ospf++ < 8) {
-        std::fprintf(stderr,
-                     "[nch-debug] poll_ospf node=%s expected=%d exit=%d exited=%d "
-                     "query_ok=%d converged=%d stdout='%s' stderr='%s'\n",
-                     node_ns.c_str(), expected_neighbors, result.exit_code,
-                     static_cast<int>(result.exited), static_cast<int>(status.query_ok),
-                     status.converged, nch_dbg_trim(result.stdout_data).c_str(),
-                     nch_dbg_trim(result.stderr_data).c_str());
-    }
-    // #endregion
-
     return status;
 }
 
@@ -149,19 +120,6 @@ AdjacencyStatus StabilizationGate::poll_bgp_peers(const std::string& node_ns,
     } catch (const std::exception&) {
         status.query_ok = false;
     }
-
-    // #region debug
-    static int nch_dbg_bgp = 0;
-    if (std::getenv("NCH_DEBUG") != nullptr && nch_dbg_bgp++ < 4) {
-        std::fprintf(stderr,
-                     "[nch-debug] poll_bgp node=%s expected=%d exit=%d exited=%d "
-                     "query_ok=%d converged=%d stdout='%s' stderr='%s'\n",
-                     node_ns.c_str(), expected_peers, result.exit_code,
-                     static_cast<int>(result.exited), static_cast<int>(status.query_ok),
-                     status.converged, nch_dbg_trim(result.stdout_data).c_str(),
-                     nch_dbg_trim(result.stderr_data).c_str());
-    }
-    // #endregion
 
     return status;
 }
@@ -195,19 +153,9 @@ bool StabilizationGate::wait_for_convergence(
         }
 
         if (all_satisfied) {
-            // #region debug
-            if (std::getenv("NCH_DEBUG") != nullptr) {
-                std::fprintf(stderr, "[nch-debug] stabilization verdict=converged\n");
-            }
-            // #endregion
             return true;
         }
         if (clock::now() >= deadline) {
-            // #region debug
-            if (std::getenv("NCH_DEBUG") != nullptr) {
-                std::fprintf(stderr, "[nch-debug] stabilization verdict=timeout\n");
-            }
-            // #endregion
             return false;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms_));

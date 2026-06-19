@@ -57,33 +57,11 @@ jobs:
         run: |
           set +e
           export LINK_SHAPER_CLI="$PWD/build/link_shaper_cli"
-          export NCH_DEBUG=1
           sudo -E python3 substrate/mininet_topology.py --topology topology.json \
             > build/substrate.log 2>&1 &
           SUBSTRATE_PID=$!
+          # Give the substrate time to build the namespaces and converge FRR.
           sleep 25
-          echo "===== substrate.log ====="
-          cat build/substrate.log
-          echo "===== ip netns list ====="
-          sudo ip netns list
-          echo "===== frr processes ====="
-          ps -ef | grep -E 'zebra|ospfd|bgpd' | grep -v grep
-          echo "===== /var/run/frr (recursive) ====="
-          sudo ls -laR /var/run/frr
-          echo "===== config dir mode ====="
-          sudo ls -ld /tmp/nch-substrate-*
-          echo "===== r1 ospfd.conf ====="
-          sudo cat /tmp/nch-substrate-*/r1/ospfd.conf
-          echo "===== frr can read r1 ospfd.conf? ====="
-          sudo -u frr cat /tmp/nch-substrate-*/r1/ospfd.conf >/dev/null 2>&1 \
-            && echo READABLE_BY_FRR || echo NOT_READABLE_BY_FRR
-          echo "===== r1 interfaces ====="
-          sudo ip netns exec r1 ip -br addr
-          echo "===== r1 ospf neighbor (plain) ====="
-          sudo ip netns exec r1 vtysh --vty_socket /var/run/frr/r1 -c "show ip ospf neighbor"
-          echo "===== r1 ospf neighbor (json) ====="
-          sudo ip netns exec r1 vtysh --vty_socket /var/run/frr/r1 -c "show ip ospf neighbor json"
-          echo "===== running chaos engine ====="
           sudo -E ./build/chaos_engine \
             --topology topology.json \
             --report build/convergence_report.json \
@@ -92,6 +70,10 @@ jobs:
           STATUS=$?
           echo "===== convergence_report.json ====="
           cat build/convergence_report.json
+          if [ "$STATUS" -ne 0 ]; then
+            echo "===== substrate.log (engine failed) ====="
+            cat build/substrate.log
+          fi
           sudo kill "$SUBSTRATE_PID" 2>/dev/null
           exit $STATUS
 
